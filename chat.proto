@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package chat;
+
+message User {
+  string nickname = 1;
+}
+
+message NewUser {
+  string nickname = 1;
+}
+
+message UpdateUserRequest {
+  string oldNickname = 1;
+  string newNickname = 2;
+}
+
+message DeleteUserRequest {
+  string nickname = 1;
+}
+
+message UserList {
+  repeated string nicknames = 1;
+}
+
+message Empty {}
+
+message ChatMessage {
+  int32 id = 1;
+  string content = 2;
+  string from = 3;
+  string to = 4;
+  string room = 5;
+  bool isPrivate = 6;
+}
+
+message MessageList {
+  repeated ChatMessage messages = 1;
+}
+
+message DeleteMessageRequest {
+  int32 id = 1;
+}
+
+message UpdateMessageRequest {
+  int32 id = 1;
+  string content = 2;
+  string to = 3;
+  string room = 4;
+  bool isPrivate = 5;
+}
+
+service ChatService {
+  // Existing
+  rpc SendMessage (ChatMessage) returns (Empty);
+  rpc GetRooms (Empty) returns (UserList);
+
+  // New User CRUD
+  rpc CreateUser (NewUser) returns (Empty);
+  rpc GetUser (User) returns (NewUser);
+  rpc UpdateUser (UpdateUserRequest) returns (Empty);
+  rpc DeleteUser (DeleteUserRequest) returns (Empty);
+  rpc ListUsers (Empty) returns (UserList);
+
+  // New Message ops
+  rpc ListMessages (Empty) returns (MessageList);
+  rpc DeleteMessage (DeleteMessageRequest) returns (Empty);
+  rpc ListMessagesByUser (User) returns (MessageList);
+  rpc UpdateMessage (UpdateMessageRequest) returns (Empty);
+}

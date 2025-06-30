@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpass
+      POSTGRES_DB: chatdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    command: npm run dev
+    volumes:
+      - .:/app
+      - ./chat.proto:/app/chat.proto # fixed: mount from current directory
+
+    working_dir: /app
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=chatdb
+      - DB_USER=chatuser
+      - DB_PASSWORD=chatpass
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+      - "50051:50051"
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

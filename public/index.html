@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Chat App</title>
+    <style>
+      body {
+        font-family: Arial;
+      }
+      #chat {
+        height: 80vh;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Chat</h1>
+    <div>
+      <input id="newRoomInput" placeholder="Create or join a room..." />
+      <button onclick="createRoom()">Go</button>
+    </div>
+    <!-- Room Selector -->
+    <div>
+      <label for="roomSelector">Select Room:</label>
+      <select id="roomSelector">
+        <option value="general">General</option>
+        <option value="tech">Tech</option>
+        <option value="random">Random</option>
+      </select>
+    </div>
+
+    <!-- Private Chat Selector -->
+    <div>
+      <label for="privateTo">Send privately to:</label>
+      <select id="privateTo">
+        <option value="">-- Everyone (public message) --</option>
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 20px">
+      <div style="flex: 3">
+        <div
+          id="chat"
+          style="
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+          "
+        ></div>
+        <div
+          id="typing"
+          style="font-style: italic; color: gray; margin-top: 5px"
+        ></div>
+        <input id="messageInput" type="text" placeholder="Type a message..." />
+        <button onclick="sendMessage()">Send</button>
+      </div>
+
+      <div style="flex: 1">
+        <h3>Online Users</h3>
+        <ul id="onlineUsers"></ul>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const nickname = prompt("Enter your nickname:");
+      const socket = io({ auth: { nickname } });
+
+      const chat = document.getElementById("chat");
+      const messageInput = document.getElementById("messageInput");
+      const typingDiv = document.getElementById("typing");
+      const onlineUsersList = document.getElementById("onlineUsers");
+      const privateToSelect = document.getElementById("privateTo");
+      const roomSelector = document.getElementById("roomSelector");
+
+      let typing = false;
+      let typingTimeout;
+
+      function appendMessage(msg, isOwn = false, isPrivate = false) {
+        const div = document.createElement("div");
+        div.textContent = (isPrivate ? "[PM] " : "") + msg;
+        if (isOwn) div.style.color = "green";
+        if (isPrivate) div.style.fontStyle = "italic";
+        chat.appendChild(div);
+        chat.scrollTop = chat.scrollHeight;
+      }
+
+      function sendMessage() {
+        const message = messageInput.value.trim();
+        const to = privateToSelect.value;
+
+        if (!message) return;
+
+        if (to) {
+          appendMessage(`To ${to}: ${message}`, true, true);
+          socket.emit("private-message", { to, message });
+        } else {
+          appendMessage(`${nickname}: ${message}`, true);
+          socket.emit("chat-message", message);
+        }
+
+        socket.emit("stop-typing");
+        messageInput.value = "";
+      }
+
+      messageInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") sendMessage();
+      });
+
+      messageInput.addEventListener("input", () => {
+        if (!typing) {
+          typing = true;
+          socket.emit("typing");
+        }
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+          typing = false;
+          socket.emit("stop-typing");
+        }, 1000);
+      });
+
+      socket.on("message", (msg) => {
+        appendMessage(msg);
+      });
+
+      socket.on("private-message", ({ from, message }) => {
+        appendMessage(`${from}: ${message}`, false, true);
+      });
+
+      socket.on("typing", (msg) => {
+        typingDiv.textContent = msg;
+      });
+
+      socket.on("stop-typing", () => {
+        typingDiv.textContent = "";
+      });
+
+      socket.on("online-users", (users) => {
+        onlineUsersList.innerHTML = "";
+        privateToSelect.innerHTML = `<option value="">-- Everyone (public message) --</option>`;
+
+        users.forEach((user) => {
+          const li = document.createElement("li");
+          li.textContent = user;
+          if (user === nickname) {
+            li.style.fontWeight = "bold";
+          }
+          onlineUsersList.appendChild(li);
+
+          if (user !== nickname) {
+            const opt = document.createElement("option");
+            opt.value = user;
+            opt.textContent = user;
+            privateToSelect.appendChild(opt);
+          }
+        });
+      });
+
+      socket.on("clear-chat", () => {
+        chat.innerHTML = "";
+      });
+
+      roomSelector.addEventListener("change", (e) => {
+        const selectedRoom = e.target.value;
+        socket.emit("join-room", selectedRoom);
+      });
+      const newRoomInput = document.getElementById("newRoomInput");
+
+      function createRoom() {
+        const roomName = newRoomInput.value.trim();
+        if (roomName) {
+          socket.emit("join-room", roomName);
+          newRoomInput.value = "";
+        }
+      }
+
+      socket.on("room-list", (rooms) => {
+        roomSelector.innerHTML = "";
+        rooms.forEach((room) => {
+          const opt = document.createElement("option");
+          opt.value = room;
+          opt.textContent = room;
+          roomSelector.appendChild(opt);
+        });
+      });
+    </script>
+  </body>
+</html>
