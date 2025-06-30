@@ -38,5 +38,18 @@ services:
     depends_on:
       - db
 
+  swagger:
+    image: swaggerapi/swagger-ui
+    container_name: swagger-ui
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./chat.swagger.json:/swagger/chat.swagger.json:ro
+    environment:
+      SWAGGER_JSON: /swagger/chat.swagger.json
+    depends_on:
+      - backend
+      - db
+
 volumes:
   pgdata:

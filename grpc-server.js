@@ -3,16 +3,20 @@ import protoLoader from "@grpc/proto-loader";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { rooms, nicknameToSocket, onlineUsers } from "./sharedState.js";
 import { sequelize, User, Message } from "./db.js";
+import { createRequire } from "module";
 
-// import { sequelize, User, Message } from "./db.js";
+// Load CommonJS reflection module
+const require = createRequire(import.meta.url);
+const wrapServerWithReflection = require("grpc-node-server-reflection").default;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const PROTO_PATH = path.resolve("chat.proto"); // this matches the mount
+// Path to proto file
+const PROTO_PATH = path.join(__dirname, "chat.proto");
 
+// Load proto definition
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
   longs: String,
@@ -21,13 +25,25 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   oneofs: true,
 });
 
-const chatProto = grpc.loadPackageDefinition(packageDefinition).chat;
+// Load package and extract the chat package
+const loadedProto = grpc.loadPackageDefinition(packageDefinition);
+const chatProto = loadedProto.chat;
+
+console.log("chatProto keys:", chatProto ? Object.keys(chatProto) : []);
 
 export function startGrpcServer() {
   const server = new grpc.Server();
-  server.addService(chatProto.ChatService.service, {
+
+  // Defensive check
+  const chatService = chatProto?.ChatService;
+  console.log("chatService", chatService);
+
+  if (!chatService) {
+    throw new Error("chat.ChatService not found in loaded proto.");
+  }
+
+  server.addService(chatService.service, {
     async SendMessage(call, callback) {
-      // Save message to DB
       const { content, from, to, room, isPrivate } = call.request;
       try {
         const user = await User.findOne({ where: { nickname: from } });
@@ -47,7 +63,6 @@ export function startGrpcServer() {
     },
 
     async GetRooms(call, callback) {
-      // Return all unique room names from messages
       try {
         const rooms = await Message.findAll({
           attributes: [
@@ -156,11 +171,12 @@ export function startGrpcServer() {
       const { id, content, to, room, isPrivate } = call.request;
       try {
         const message = await Message.findByPk(id);
-        if (!message)
+        if (!message) {
           return callback({
             code: grpc.status.NOT_FOUND,
             message: "Message not found",
           });
+        }
         if (content !== undefined) message.content = content;
         if (to !== undefined) message.to = to;
         if (room !== undefined) message.room = room;
@@ -173,12 +189,17 @@ export function startGrpcServer() {
     },
   });
 
+  //  Enable reflection AFTER services are registered
+  wrapServerWithReflection(server, {
+    protoRoot: __dirname,
+    protoFileNames: ["chat.proto"],
+  });
+
   server.bindAsync(
     "0.0.0.0:50051",
     grpc.ServerCredentials.createInsecure(),
     () => {
       console.log("gRPC server running on port 50051");
-      server.start();
     }
   );
 }
