@@ -6,17 +6,14 @@ import { dirname } from "path";
 import { sequelize, User, Message } from "./db.js";
 import { createRequire } from "module";
 
-// Load CommonJS reflection module
 const require = createRequire(import.meta.url);
-const wrapServerWithReflection = require("grpc-node-server-reflection").default;
+const { addReflection } = require("grpc-server-reflection");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Path to proto file
 const PROTO_PATH = path.join(__dirname, "chat.proto");
 
-// Load proto definition
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
   longs: String,
@@ -25,7 +22,6 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   oneofs: true,
 });
 
-// Load package and extract the chat package
 const loadedProto = grpc.loadPackageDefinition(packageDefinition);
 const chatProto = loadedProto.chat;
 
@@ -38,11 +34,10 @@ export function startGrpcServer() {
   const chatService = chatProto?.ChatService;
   console.log("chatService", chatService);
 
-  if (!chatService) {
+  if (!chatProto?.ChatService) {
     throw new Error("chat.ChatService not found in loaded proto.");
   }
-
-  server.addService(chatService.service, {
+  server.addService(chatProto.ChatService.service, {
     async SendMessage(call, callback) {
       const { content, from, to, room, isPrivate } = call.request;
       try {
@@ -190,10 +185,7 @@ export function startGrpcServer() {
   });
 
   //  Enable reflection AFTER services are registered
-  wrapServerWithReflection(server, {
-    protoRoot: __dirname,
-    protoFileNames: ["chat.proto"],
-  });
+  addReflection(server, path.join(__dirname, "chat_descriptor.pb"));
 
   server.bindAsync(
     "0.0.0.0:50051",
